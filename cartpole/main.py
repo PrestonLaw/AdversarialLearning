@@ -12,6 +12,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 from torch.distributions import ContinuousBernoulli
+from torch.distributions import Normal
 
 from continuous_cartpole import ContinuousCartPoleEnv
 
@@ -20,7 +21,7 @@ import pdb
 
 
 gamma = 0.99
-log_interval = 10
+log_interval = 100
 
 
 
@@ -33,22 +34,22 @@ SavedAction = namedtuple('SavedAction', ['log_prob', 'value'])
 
 
 class ActorCritic(nn.Module):
-	def __init__(self):
-		super(ActorCritic, self).__init__()
-		# CartPole has 4 parameters
-		self.fc1 = nn.Linear(4, 128)
-		# Continuous CartPole has 1 action, continuous float32 from [-1,1]
-		self.actor = nn.Linear(128, 1)
-		# Critics always have 1 output
-		self.critic = nn.Linear(128, 1)
-		self.saved_actions = []
-		self.rewards = []
+    def __init__(self):
+        super(ActorCritic, self).__init__()
+        # CartPole has 4 parameters
+        self.fc1 = nn.Linear(4, 128)
+        # Continuous CartPole has 1 action, continuous float32 from [-1,1]
+        self.actor = nn.Linear(128, 1)
+        # Critics always have 1 output
+        self.critic = nn.Linear(128, 1)
+        self.saved_actions = []
+        self.rewards = []
 
-	def forward(self, x):
-		x = F.relu(self.fc1(x))
-		action_prob = F.softmax(self.actor(x), dim=-1)
-		state_values = self.critic(x)
-		return action_prob, state_values
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        action_mean = F.softmax(self.actor(x), dim=-1)
+        state_values = self.critic(x)
+        return action_mean, state_values
 
 
 
@@ -59,21 +60,25 @@ eps = np.finfo(np.float32).eps.item()
 
 
 def select_action(state):
-	state = torch.from_numpy(state).float()
-	probs, state_value = model(state)
+    state = torch.from_numpy(state).float()
+    action_mean, state_value = model(state)
 
-	# Difference here, we can't use a Categorical distribution because the action space is continuous.
-	m = ContinuousBernoulli(probs)
+    # Difference here, we can't use a Categorical distribution because the action space is continuous.
+    #m = ContinuousBernoulli(probs)
+    #pdb.set_trace()
+    m = Normal(action_mean, (min(1-action_mean, action_mean+1)/3))
+    # TODO: Find something that won't select out of the Box bounds, or just clip it.
+    np.clip(m, np.float32(-1.0), np.float32(1.0))
 
-	# Sample action from distribution
-	action = m.sample()
+    # Sample action from distribution
+    action = m.sample()
 
-	# Save to action buffer
-	model.saved_actions.append(SavedAction(m.log_prob(action), state_value))
+    # Save to action buffer
+    model.saved_actions.append(SavedAction(m.log_prob(action), state_value))
 
-	# Return the action to take.
-	# TODO: Change?
-	return action.item()
+    # Return the action to take.
+    # TODO: Change?
+    return action.item()
 
 
 
