@@ -11,7 +11,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
-from torch.distributions import ContinuousBernoulli
 from torch.distributions import Normal
 
 from continuous_cartpole import ContinuousCartPoleEnv
@@ -64,7 +63,6 @@ def select_action(state):
     action_mean, state_value = model(state)
 
     # Difference here, we can't use a Categorical distribution because the action space is continuous.
-    #m = ContinuousBernoulli(probs)
     #pdb.set_trace()
     m = Normal(action_mean, (min(1-action_mean, action_mean+1)/3))
     # TODO: Find something that won't select out of the Box bounds, or just clip it.
