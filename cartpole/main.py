@@ -65,7 +65,7 @@ def select_action(state):
     state = torch.from_numpy(state).float()
     action_set, state_value = model(state)
     
-    pdb.set_trace()
+    #pdb.set_trace()
     
     # Use the category probabilities to pick a direction.
     m1 = Categorical(action_set[0:2])
@@ -74,8 +74,8 @@ def select_action(state):
     # Use a clipped normal distribution to select a magnitude.
     #m = Normal(0.5, 0.5/3)
     m2 = Normal(action_set[direction + 2].item(), 0.5/3)
-    np.clip(m2, np.float32(0), np.float(1))
     magnitude = m2.sample()
+    np.clip(magnitude, np.float32(0), np.float32(1))
     
     # The action takes into account the magnitude and direction.
     action = magnitude
