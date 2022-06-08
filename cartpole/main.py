@@ -75,10 +75,18 @@ def select_action(state):
     #m = Normal(0.5, 0.5/3)
     m2 = Normal(action_set[direction + 2].item(), 0.5/3)
     magnitude = m2.sample()
-    np.clip(magnitude, np.float32(0), np.float32(1))
+    if magnitude.item() < 0.0:
+        magnitude = torch.from_numpy(np.asarray(0.0))
+    elif magnitude.item() > 1.0:
+        magnitude = torch.from_numpy(np.asarray(1.0))
+    
+    #print(magnitude)
+    
+    assert magnitude.item() >= 0.0
+    assert magnitude.item() <= 1.0
     
     # The action takes into account the magnitude and direction.
-    action = magnitude
+    action = magnitude.item()
     if direction == 0:
         action *= -1
 
@@ -154,6 +162,7 @@ def main():
 
             # select action from policy
             action = select_action(state)
+            #np.clip(action, np.float32(-1), np.float32(1))
 
             # take the action
             #pdb.set_trace()
