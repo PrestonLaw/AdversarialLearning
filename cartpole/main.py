@@ -38,7 +38,10 @@ class ActorCritic(nn.Module):
         # CartPole has 4 parameters
         self.fc1 = nn.Linear(4, 128)
         # Continuous CartPole has 1 action, continuous float32 from [-1,1]
-        self.actor = nn.Linear(128, 1)
+        # Divide it into 4 to match the old network structure.
+        # Two probabilities of being positive/negative that don't have to sum to 1, and
+        # the magnitudes of force applied to the cart in either direction.
+        self.actor = nn.Linear(128, 4)
         # Critics always have 1 output
         self.critic = nn.Linear(128, 1)
         self.saved_actions = []
@@ -46,9 +49,9 @@ class ActorCritic(nn.Module):
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
-        action_mean = F.softmax(self.actor(x), dim=-1)
+        action_set = F.softmax(self.actor(x), dim=-1)
         state_values = self.critic(x)
-        return action_mean, state_values
+        return action_set, state_values
 
 
 
@@ -60,23 +63,33 @@ eps = np.finfo(np.float32).eps.item()
 
 def select_action(state):
     state = torch.from_numpy(state).float()
-    action_mean, state_value = model(state)
-
-    # Difference here, we can't use a Categorical distribution because the action space is continuous.
-    #pdb.set_trace()
-    m = Normal(action_mean, (min(1-action_mean, action_mean+1)/3))
-    # TODO: Find something that won't select out of the Box bounds, or just clip it.
-    np.clip(m, np.float32(-1.0), np.float32(1.0))
-
-    # Sample action from distribution
-    action = m.sample()
+    action_set, state_value = model(state)
+    
+    pdb.set_trace()
+    
+    # Use the category probabilities to pick a direction.
+    m1 = Categorical(action_set[0:2])
+    direction = m1.sample()
+    
+    # Use a clipped normal distribution to select a magnitude.
+    #m = Normal(0.5, 0.5/3)
+    m2 = Normal(action_set[direction + 2].item(), 0.5/3)
+    np.clip(m2, np.float32(0), np.float(1))
+    magnitude = m2.sample()
+    
+    # The action takes into account the magnitude and direction.
+    action = magnitude
+    if direction == 0:
+        action *= -1
 
     # Save to action buffer
-    model.saved_actions.append(SavedAction(m.log_prob(action), state_value))
+    # TODO: do I need to change this?
+    model.saved_actions.append(SavedAction(m1.log_prob(direction) + m2.log_prob(magnitude), state_value))
 
     # Return the action to take.
     # TODO: Change?
-    return action.item()
+    #return action.item()
+    return action
 
 
 
